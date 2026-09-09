@@ -70,8 +70,12 @@
 - [x] Preserve reset-view behavior and reduced-motion accessibility for camera focus
 - [x] Verify focus transitions on desktop/mobile and save a new checkpoint
 
-- [ ] Check GitHub CLI authentication and repository permissions
-- [ ] Prepare a clean source export and deployment documentation
-- [ ] Create and push the OSIRIS repository to GitHub if authorized
-- [ ] Generate a ZIP archive of the project source
-- [ ] Provide Vercel deployment steps and required environment variables
+- [x] Check GitHub CLI authentication and repository permissions
+- [x] Prepare a clean source export and deployment documentation
+- [x] Create and push the OSIRIS repository to GitHub if authorized
+- [x] Generate a ZIP archive of the project source
+- [x] Provide Vercel deployment steps and required environment variables
+
+- [ ] Correct Vercel deployment documentation with the exact frontend-only environment variables
+- [ ] Document full-stack backend, OAuth callback, database, and `/api/trpc` hosting requirements
+- [ ] Update GitHub commit and regenerate the ZIP after documentation corrections
