@@ -1,17 +1,7 @@
 import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
-/**
- * Core user table backing auth flow.
- * Extend this file with additional tables as your product grows.
- * Columns use camelCase to match both database fields and generated types.
- */
 export const users = mysqlTable("users", {
-  /**
-   * Surrogate primary key. Auto-incremented numeric value managed by the database.
-   * Use this for relations between tables.
-   */
   id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
@@ -22,7 +12,52 @@ export const users = mysqlTable("users", {
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
+export const workspacePreferences = mysqlTable("workspace_preferences", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  visibleLayers: text("visibleLayers").notNull(),
+  defaultRegion: varchar("defaultRegion", { length: 80 }).default("Global"),
+  theme: varchar("theme", { length: 20 }).default("dark"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const followedAreas = mysqlTable("followed_areas", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  region: varchar("region", { length: 120 }).notNull(),
+  geometry: text("geometry"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const alertRules = mysqlTable("alert_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  category: varchar("category", { length: 40 }).notNull(),
+  severity: mysqlEnum("severity", ["low", "moderate", "high"]).default("moderate").notNull(),
+  region: varchar("region", { length: 120 }).default("Global"),
+  enabled: int("enabled").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const alertEvents = mysqlTable("alert_events", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  ruleId: int("ruleId"),
+  title: varchar("title", { length: 180 }).notNull(),
+  source: varchar("source", { length: 100 }).notNull(),
+  category: varchar("category", { length: 40 }).notNull(),
+  severity: varchar("severity", { length: 20 }).notNull(),
+  sourceUrl: text("sourceUrl"),
+  observedAt: timestamp("observedAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
-
-// TODO: Add your tables here
+export type WorkspacePreferences = typeof workspacePreferences.$inferSelect;
+export type FollowedArea = typeof followedAreas.$inferSelect;
+export type AlertRule = typeof alertRules.$inferSelect;
+export type AlertEvent = typeof alertEvents.$inferSelect;
