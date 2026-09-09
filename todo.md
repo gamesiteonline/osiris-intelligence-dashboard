@@ -28,3 +28,8 @@
 - [x] Add cinematic animated map markers with pulsing halos and signal rings
 - [x] Add clearly labeled simulated public-data heartbeat motion with reduced-motion support
 - [x] Verify animated desktop/mobile map presentation, typecheck, tests, build, and checkpoint
+
+- [x] Add animated aircraft route trails with movement-history markers
+- [x] Add animated maritime route trails with movement-history markers
+- [x] Label simulated route history and preserve reduced-motion accessibility
+- [x] Verify desktop/mobile trails, typecheck, tests, build, and checkpoint

@@ -91,6 +91,14 @@ function MapCanvas({ activeLayers, onSelect }: { activeLayers: string[]; onSelec
         <circle className="signal-arc arc-one" cx="170" cy="130" r="34" />
         <circle className="signal-arc arc-two" cx="710" cy="190" r="52" />
         <circle className="signal-arc arc-three" cx="560" cy="305" r="42" />
+        <path id="air-route-a" className="route-trail route-air" d="M120 250 C260 180 360 225 500 150 S760 120 900 205" />
+        <path id="air-route-b" className="route-trail route-air route-secondary" d="M320 360 C420 290 540 330 640 260 S820 250 930 320" />
+        <path id="sea-route-a" className="route-trail route-sea" d="M80 405 C220 370 340 410 470 390 S720 420 920 365" />
+        <path id="sea-route-b" className="route-trail route-sea route-secondary" d="M160 445 C300 420 430 445 570 430 S780 450 900 420" />
+        <circle className="route-vessel route-vessel-a" r="4"><animateMotion dur="11s" repeatCount="indefinite" rotate="auto"><mpath href="#sea-route-a" /></animateMotion></circle>
+        <circle className="route-vessel route-vessel-b" r="3"><animateMotion dur="15s" begin="-6s" repeatCount="indefinite" rotate="auto"><mpath href="#sea-route-b" /></animateMotion></circle>
+        <circle className="route-aircraft route-aircraft-a" r="4"><animateMotion dur="8s" repeatCount="indefinite" rotate="auto"><mpath href="#air-route-a" /></animateMotion></circle>
+        <circle className="route-aircraft route-aircraft-b" r="3"><animateMotion dur="10s" begin="-4s" repeatCount="indefinite" rotate="auto"><mpath href="#air-route-b" /></animateMotion></circle>
       </svg>
       <div className="map-scale"><span>0</span><i /><span>2,000 km</span></div>
       {mapDots.map(([x, y, color, label], index) => {
@@ -99,7 +107,7 @@ function MapCanvas({ activeLayers, onSelect }: { activeLayers: string[]; onSelec
         return visible ? <button key={label + index} className={`map-dot dot-${color} ${livePulse ? "is-live" : ""}`} style={{ left: `${x}%`, top: `${y}%`, animationDelay: `${(index % 5) * 180}ms` }} onClick={() => onSelect(label)} aria-label={`Inspect ${label}`}><span className="marker-core" /><span className="marker-halo" /><b /></button> : null;
       })}
       <div className="map-controls"><button aria-label="Zoom in">+</button><button aria-label="Zoom out">−</button><button aria-label="Locate me"><LocateFixed size={15} /></button></div>
-      <div className="map-status"><span className="pulse-live" /> <span className="status-live-label">SIMULATED HEARTBEAT</span> <span>·</span> PUBLIC FEED MOTION <span>·</span> 18:42:16 UTC</div>
+      <div className="map-status"><span className="pulse-live" /> <span className="status-live-label">SIMULATED HEARTBEAT</span> <span>·</span> PUBLIC FEED MOTION <span>·</span> ROUTES: AIR / SEA <span>·</span> 18:42:16 UTC</div>
     </div>
   );
 }
