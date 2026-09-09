@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import {
@@ -70,11 +70,31 @@ function SourceTag({ source }: { source: string }) {
   return <span className="source-tag"><span className="source-dot" />{source}</span>;
 }
 
-function MapCanvas({ activeLayers, onSelect }: { activeLayers: string[]; onSelect: (label: string) => void }) {
+const globeTextureUrl = "/manus-storage/osiris-earth-texture_45c22fd8.jpg";
+const fallbackGlobePlaces = [
+  { name: "Vanuatu", lat: -17.7, lng: 168.3, color: "#62f5c8", label: "M 5.1 · Vanuatu", source: "USGS Earthquake Hazards", category: "SEISMIC EVENT", metric: "5.1 Mw", detail: "81 km depth" },
+  { name: "Amazonas, Brazil", lat: -3.4, lng: -62.2, color: "#ffad68", label: "Fire cluster · Brazil", source: "NASA FIRMS", category: "THERMAL ANOMALY", metric: "42 hotspots", detail: "High confidence" },
+  { name: "Piemonte, Italy", lat: 45.1, lng: 7.7, color: "#72a8ff", label: "Storm cell · Piemonte", source: "MeteoAlarm", category: "SEVERE WEATHER", metric: "Storm cell", detail: "Regional warning" },
+  { name: "Singapore Strait", lat: 1.2, lng: 103.8, color: "#4edfed", label: "Vessel density · Singapore", source: "AISstream", category: "MARITIME ACTIVITY", metric: "631 vessels", detail: "Density index" },
+  { name: "Japan", lat: 36.2, lng: 138.3, color: "#62f5c8", label: "Seismic · Japan", source: "USGS Earthquake Hazards", category: "SEISMIC EVENT", metric: "M 4.7", detail: "Shallow event" },
+  { name: "Sydney, Australia", lat: -33.9, lng: 151.2, color: "#ffad68", label: "Fire · Australia", source: "NASA FIRMS", category: "THERMAL ANOMALY", metric: "18 hotspots", detail: "Moderate confidence" },
+];
+
+function MapCanvas({ activeLayers, places, onSelect }: { activeLayers: string[]; places: typeof fallbackGlobePlaces; onSelect: (label: string) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
+  const rotationRef = useRef({ lng: 12, lat: 8 });
+  const dragRef = useRef({ active: false, x: 0, y: 0, moved: false });
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef({ distance: 0, zoom: 1 });
+  const [zoom, setZoom] = useState(1);
+  const [textureReady, setTextureReady] = useState(false);
+  const [, setRotationVersion] = useState(0);
   const [heartbeat, setHeartbeat] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
   const showAircraftRoutes = activeLayers.includes("flights");
   const showMaritimeRoutes = activeLayers.includes("maritime");
+
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => setReducedMotion(media.matches);
@@ -83,45 +103,194 @@ function MapCanvas({ activeLayers, onSelect }: { activeLayers: string[]; onSelec
     return () => media.removeEventListener?.("change", update);
   }, []);
   useEffect(() => {
-    const timer = window.setInterval(() => setHeartbeat(current => (current + 1) % 4), 2600);
-    return () => window.clearInterval(timer);
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.src = globeTextureUrl;
+    image.onload = () => { imageRef.current = image; setTextureReady(true); };
   }, []);
+  useEffect(() => {
+    if (reducedMotion) return;
+    const timer = window.setInterval(() => setHeartbeat(current => (current + 1) % 4), 2200);
+    return () => window.clearInterval(timer);
+  }, [reducedMotion]);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const parent = canvas.parentElement;
+    const width = parent?.clientWidth ?? 760;
+    const height = parent?.clientHeight ?? 470;
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = width * ratio;
+    canvas.height = height * ratio;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.clearRect(0, 0, width, height);
+    const radius = Math.min(width * .37, height * .72) * zoom;
+    const cx = width / 2;
+    const cy = height / 2 - 4;
+    const image = imageRef.current;
+    const diameter = Math.max(220, Math.floor(radius * 2));
+    const sphere = document.createElement("canvas");
+    sphere.width = diameter;
+    sphere.height = diameter;
+    const sphereContext = sphere.getContext("2d");
+    if (sphereContext) {
+      const texture = document.createElement("canvas");
+      texture.width = 360;
+      texture.height = 180;
+      const textureContext = texture.getContext("2d");
+      if (image && textureContext) {
+        textureContext.drawImage(image, 0, 0, texture.width, texture.height);
+        const textureData = textureContext.getImageData(0, 0, texture.width, texture.height).data;
+        const sphereData = sphereContext.createImageData(diameter, diameter);
+        const yaw = (rotationRef.current.lng * Math.PI) / 180;
+        const pitch = (rotationRef.current.lat * Math.PI) / 180;
+        const sinPitch = Math.sin(pitch);
+        const cosPitch = Math.cos(pitch);
+        for (let py = 0; py < diameter; py += 1) {
+          for (let px = 0; px < diameter; px += 1) {
+            const nx = (px + .5 - diameter / 2) / (diameter / 2);
+            const ny = (py + .5 - diameter / 2) / (diameter / 2);
+            const distance = nx * nx + ny * ny;
+            if (distance > 1) continue;
+            const z = Math.sqrt(1 - distance);
+            const y = -ny;
+            const rotatedY = y * cosPitch + z * sinPitch;
+            const rotatedZ = -y * sinPitch + z * cosPitch;
+            const longitude = yaw + Math.atan2(nx, rotatedZ);
+            const latitude = Math.asin(Math.max(-1, Math.min(1, rotatedY)));
+            const tx = Math.floor((((longitude / (Math.PI * 2)) + .5) % 1 + 1) % 1 * texture.width);
+            const ty = Math.floor((.5 - latitude / Math.PI) * texture.height);
+            const source = (Math.max(0, Math.min(texture.height - 1, ty)) * texture.width + tx) * 4;
+            const target = (py * diameter + px) * 4;
+            const light = .64 + z * .42;
+            sphereData.data[target] = Math.min(255, textureData[source] * light);
+            sphereData.data[target + 1] = Math.min(255, textureData[source + 1] * light);
+            sphereData.data[target + 2] = Math.min(255, textureData[source + 2] * light);
+            sphereData.data[target + 3] = 255;
+          }
+        }
+        sphereContext.putImageData(sphereData, 0, 0);
+      } else {
+        sphereContext.fillStyle = "#092c38";
+        sphereContext.fillRect(0, 0, diameter, diameter);
+      }
+      context.drawImage(sphere, cx - radius, cy - radius, diameter, diameter);
+    }
+    context.save();
+    context.beginPath();
+    context.arc(cx, cy, radius, 0, Math.PI * 2);
+    context.strokeStyle = "rgba(113, 239, 204, .6)";
+    context.lineWidth = 1;
+    context.shadowColor = "rgba(61, 232, 195, .55)";
+    context.shadowBlur = 24;
+    context.stroke();
+    context.restore();
+
+    const project = (lat: number, lng: number) => {
+      const lon = ((lng - rotationRef.current.lng) * Math.PI) / 180;
+      const latRad = (lat * Math.PI) / 180;
+      const centerLat = (rotationRef.current.lat * Math.PI) / 180;
+      const x3 = Math.cos(latRad) * Math.sin(lon);
+      const y3 = Math.sin(latRad) * Math.cos(centerLat) - Math.cos(latRad) * Math.cos(lon) * Math.sin(centerLat);
+      const z3 = Math.sin(latRad) * Math.sin(centerLat) + Math.cos(latRad) * Math.cos(lon) * Math.cos(centerLat);
+      return { x: cx + x3 * radius, y: cy - y3 * radius, visible: z3 > -.04, depth: z3 };
+    };
+    places.forEach((place, index) => {
+      const point = project(place.lat, place.lng);
+      if (!point.visible) return;
+      const pulse = !reducedMotion && (index + heartbeat) % 4 === 0;
+      context.beginPath();
+      context.arc(point.x, point.y, pulse ? 10 : 7, 0, Math.PI * 2);
+      context.strokeStyle = `${place.color}66`;
+      context.lineWidth = 1;
+      context.stroke();
+      context.beginPath();
+      context.arc(point.x, point.y, 3.5, 0, Math.PI * 2);
+      context.fillStyle = place.color;
+      context.shadowColor = place.color;
+      context.shadowBlur = 12;
+      context.fill();
+      context.shadowBlur = 0;
+    });
+  }, [zoom, textureReady, heartbeat, reducedMotion, showAircraftRoutes, showMaritimeRoutes]);
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointersRef.current.size === 2) {
+      const points = Array.from(pointersRef.current.values());
+      const first = points[0];
+      const second = points[1];
+      pinchRef.current = { distance: Math.hypot(first.x - second.x, first.y - second.y), zoom };
+      dragRef.current.active = false;
+    } else {
+      dragRef.current = { active: true, x: event.clientX, y: event.clientY, moved: false };
+    }
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (pointersRef.current.has(event.pointerId)) pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointersRef.current.size >= 2) {
+      const points = Array.from(pointersRef.current.values());
+      const first = points[0];
+      const second = points[1];
+      const distance = Math.hypot(first.x - second.x, first.y - second.y);
+      const baseDistance = pinchRef.current.distance || distance;
+      setZoom(Math.max(.76, Math.min(1.28, pinchRef.current.zoom * (distance / baseDistance))));
+      return;
+    }
+    if (!dragRef.current.active) return;
+    const dx = event.clientX - dragRef.current.x;
+    const dy = event.clientY - dragRef.current.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) dragRef.current.moved = true;
+    rotationRef.current.lng -= dx * .42;
+    rotationRef.current.lat = Math.max(-65, Math.min(65, rotationRef.current.lat + dy * .32));
+    dragRef.current.x = event.clientX;
+    dragRef.current.y = event.clientY;
+    setRotationVersion(current => current + 1);
+  };
+  const handlePointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    pointersRef.current.delete(event.pointerId);
+    if (pointersRef.current.size < 2) pinchRef.current.distance = 0;
+    if (!dragRef.current.moved && pointersRef.current.size === 0) {
+      const bounds = event.currentTarget.getBoundingClientRect();
+      const x = event.clientX - bounds.left;
+      const y = event.clientY - bounds.top;
+      const width = bounds.width;
+      const height = bounds.height;
+      const radius = Math.min(width * .37, height * .72) * zoom;
+      const cx = width / 2;
+      const cy = height / 2 - 4;
+      let closest: { label: string; distance: number } | null = null;
+      places.forEach(place => {
+        const lon = ((place.lng - rotationRef.current.lng) * Math.PI) / 180;
+        const latRad = (place.lat * Math.PI) / 180;
+        const centerLat = (rotationRef.current.lat * Math.PI) / 180;
+        const x3 = Math.cos(latRad) * Math.sin(lon);
+        const y3 = Math.sin(latRad) * Math.cos(centerLat) - Math.cos(latRad) * Math.cos(lon) * Math.sin(centerLat);
+        const z3 = Math.sin(latRad) * Math.sin(centerLat) + Math.cos(latRad) * Math.cos(lon) * Math.cos(centerLat);
+        const px = cx + x3 * radius;
+        const py = cy - y3 * radius;
+        const distance = Math.hypot(px - x, py - y);
+        if (z3 > 0 && distance < 32 && (!closest || distance < closest.distance)) closest = { label: place.label, distance };
+      });
+      const selected = closest;
+      if (selected !== null) onSelect((selected as { label: string; distance: number }).label);
+    }
+    dragRef.current.active = false;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
+  const resetGlobe = () => { rotationRef.current = { lng: 12, lat: 8 }; setZoom(1); setRotationVersion(current => current + 1); };
   return (
-    <div className="map-canvas" role="img" aria-label="Stylized global map showing public intelligence events">
-      <div className="map-grid" />
-      <div className="map-glow map-glow-one" />
-      <div className="map-glow map-glow-two" />
-      <svg className="map-land" viewBox="0 0 1000 480" preserveAspectRatio="none" aria-hidden="true">
-        <path d="M62 116l54-37 65 16 28 38 58 23 23 46-37 17-42-23-50 8-41-29-52 1-25-27zM316 104l53-24 67 14 39 30 47-1 39 29-36 35-65-8-45 22-33-30-53-12-26-29zM578 91l72-22 47 21 31 39-17 33-55 3-32 35-47-20 13-38-33-20zM744 229l51-18 55 29 22 51-27 38-48-11-36-40-38-20zM235 301l67-17 40 24 29 57-27 41-55-8-34-42-48-17zM454 300l83-25 55 39 2 49-58 23-62-19-43-34z" />
-      </svg>
-      <div className="map-label map-label-north">NORTH ATLANTIC</div>
-      <div className="map-label map-label-pacific">PACIFIC OCEAN</div>
-      <div className="map-label map-label-sahara">SAHARA</div>
-      <svg className="map-signal-arcs" viewBox="0 0 1000 480" preserveAspectRatio="none" aria-hidden="true">
-        <circle className="signal-arc arc-one" cx="170" cy="130" r="34" />
-        <circle className="signal-arc arc-two" cx="710" cy="190" r="52" />
-        <circle className="signal-arc arc-three" cx="560" cy="305" r="42" />
-        {showAircraftRoutes && <g aria-label="Simulated aircraft movement history">
-          <path id="air-route-a" className="route-trail route-air" d="M120 250 C260 180 360 225 500 150 S760 120 900 205" />
-          <path id="air-route-b" className="route-trail route-air route-secondary" d="M320 360 C420 290 540 330 640 260 S820 250 930 320" />
-          <circle className="route-aircraft route-aircraft-a" cx="500" cy="150" r="4">{!reducedMotion && <animateMotion dur="8s" repeatCount="indefinite" rotate="auto"><mpath href="#air-route-a" /></animateMotion>}</circle>
-          <circle className="route-aircraft route-aircraft-b" cx="640" cy="260" r="3">{!reducedMotion && <animateMotion dur="10s" begin="-4s" repeatCount="indefinite" rotate="auto"><mpath href="#air-route-b" /></animateMotion>}</circle>
-        </g>}
-        {showMaritimeRoutes && <g aria-label="Simulated maritime movement history">
-          <path id="sea-route-a" className="route-trail route-sea" d="M80 405 C220 370 340 410 470 390 S720 420 920 365" />
-          <path id="sea-route-b" className="route-trail route-sea route-secondary" d="M160 445 C300 420 430 445 570 430 S780 450 900 420" />
-          <circle className="route-vessel route-vessel-a" cx="470" cy="390" r="4">{!reducedMotion && <animateMotion dur="11s" repeatCount="indefinite" rotate="auto"><mpath href="#sea-route-a" /></animateMotion>}</circle>
-          <circle className="route-vessel route-vessel-b" cx="570" cy="430" r="3">{!reducedMotion && <animateMotion dur="15s" begin="-6s" repeatCount="indefinite" rotate="auto"><mpath href="#sea-route-b" /></animateMotion>}</circle>
-        </g>}
-      </svg>
-      <div className="map-scale"><span>0</span><i /><span>2,000 km</span></div>
-      {mapDots.map(([x, y, color, label], index) => {
-        const visible = activeLayers.length > 0 || index < 4;
-        const livePulse = (index + heartbeat) % 4 === 0;
-        return visible ? <button key={label + index} className={`map-dot dot-${color} ${livePulse ? "is-live" : ""}`} style={{ left: `${x}%`, top: `${y}%`, animationDelay: `${(index % 5) * 180}ms` }} onClick={() => onSelect(label)} aria-label={`Inspect ${label}`}><span className="marker-core" /><span className="marker-halo" /><b /></button> : null;
-      })}
-      <div className="map-controls"><button aria-label="Zoom in">+</button><button aria-label="Zoom out">−</button><button aria-label="Locate me"><LocateFixed size={15} /></button></div>
-      <div className="map-status"><span className="pulse-live" /> <span className="status-live-label">SIMULATED HEARTBEAT</span> <span>·</span> PUBLIC FEED MOTION <span>·</span> ROUTES: AIR / SEA <span>·</span> 18:42:16 UTC</div>
+    <div className="map-canvas globe-canvas" role="application" aria-label="Interactive real Earth globe. Drag to rotate, scroll or use controls to zoom, and tap a signal to inspect it.">
+      <canvas ref={canvasRef} className="earth-globe" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} onWheel={event => { event.preventDefault(); setZoom(value => Math.max(.76, Math.min(1.28, value - event.deltaY * .0008))); }} />
+      <div className="globe-backdrop" />
+      <div className="globe-hint"><Globe2 size={13} /> REAL EARTH SURFACE <span>·</span> DRAG / TOUCH TO ROTATE</div>
+      <div className="globe-controls"><button aria-label="Zoom in" onClick={() => setZoom(value => Math.min(1.28, value + .08))}>+</button><button aria-label="Zoom out" onClick={() => setZoom(value => Math.max(.76, value - .08))}>−</button><button aria-label="Reset globe view" onClick={resetGlobe}><LocateFixed size={14} /></button></div>
+      <div className="map-status"><span className="pulse-live" /> <span className="status-live-label">PUBLIC GEO LAYER</span> <span>·</span> NASA BLUE MARBLE BASE <span>·</span> TAP A SIGNAL FOR DETAILS</div>
     </div>
   );
 }
@@ -139,6 +308,21 @@ export default function Home() {
   const toggleRule = trpc.workspace.toggleRule.useMutation();
   const workspaceUtils = trpc.useUtils();
   const [activeLayers, setActiveLayers] = useState(layerCatalog.map(layer => layer.id));
+  const liveGlobePlaces = useMemo(() => {
+    const earthquakes = (snapshot?.earthquakes ?? []).slice(0, 4).map(item => ({
+      name: item.place,
+      lat: item.lat,
+      lng: item.lon,
+      color: "#62f5c8",
+      label: item.title + " · " + item.place,
+      source: item.source,
+      category: "SEISMIC EVENT",
+      metric: `${item.magnitude ?? "—"} Mw`,
+      detail: "Public earthquake record",
+    }));
+    return [...earthquakes, ...fallbackGlobePlaces.filter(place => !earthquakes.some(item => item.name === place.name))];
+  }, [snapshot]);
+  const [selectedPlace, setSelectedPlace] = useState(fallbackGlobePlaces[0]);
   const [selectedEvent, setSelectedEvent] = useState("M 5.1 · Vanuatu");
   const [activeFilter, setActiveFilter] = useState("All events");
   const [showRecon, setShowRecon] = useState(false);
@@ -157,6 +341,11 @@ export default function Home() {
     if (user) savePreferences.mutate({ visibleLayers: next, defaultRegion: "Global" });
     return next;
   });
+  const handleMapSelect = (label: string) => {
+    setSelectedEvent(label);
+    const place = liveGlobePlaces.find(item => item.label === label);
+    if (place) setSelectedPlace(place);
+  };
   const showWorkspace = () => { if (!user) startLogin(); else setShowWorkspacePanel(true); };
 
   return (
@@ -180,7 +369,7 @@ export default function Home() {
           <div className="stat-strip"><div className="stat-card"><div className="stat-label"><span className="stat-icon teal"><Activity size={15} /></span>EVENTS IN VIEW</div><div className="stat-number">2,847</div><div className="stat-foot positive"><ArrowUpRight size={13} /> 12.8% vs. 24h</div></div><div className="stat-card"><div className="stat-label"><span className="stat-icon orange"><AlertTriangle size={15} /></span>ACTIVE ALERTS</div><div className="stat-number">{alertHistory?.length ?? 18}</div><div className="stat-foot warning"><span className="mini-dot" /> 4 require review</div></div><div className="stat-card"><div className="stat-label"><span className="stat-icon blue"><Database size={15} /></span>PUBLIC SOURCES</div><div className="stat-number">11<span className="stat-unit"> / 11</span></div><div className="stat-foot neutral"><Check size={13} /> All responding</div></div><div className="stat-card"><div className="stat-label"><span className="stat-icon purple"><Target size={15} /></span>FOLLOWED AREAS</div><div className="stat-number">06</div><div className="stat-foot neutral"><MapPin size={13} /> Personal workspace</div></div></div>
 
           <section className="dashboard-grid">
-            <div className="map-panel panel"><div className="panel-header"><div><div className="panel-title"><span className="panel-kicker">LIVE MAP</span>Global signal field</div><div className="panel-meta"><span className="pulse-live" /> {snapshot?.meta.freshness ?? "Public feeds · refreshed continuously"}</div></div><div className="panel-actions"><div className="map-search"><Search size={13} /><input value={mapQuery} onChange={event => setMapQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && mapQuery.trim()) { const match = snapshot?.earthquakes.find(item => `${item.title} ${item.place}`.toLowerCase().includes(mapQuery.toLowerCase())); setSelectedEvent(match ? `${match.title} · ${match.place}` : `${mapQuery.trim()} · public index`); } }} placeholder="Search map" /></div><button className="ghost-button"><Crosshair size={15} /> Focus</button><button className="ghost-button"><Boxes size={15} /> Base map <ChevronDown size={13} /></button></div></div><div className="map-wrap"><MapCanvas activeLayers={activeLayers} onSelect={setSelectedEvent} /><div className="map-inspector"><div className="inspector-top"><span className="event-type">SEISMIC EVENT</span><button aria-label="Close inspector"><X size={14} /></button></div><h3>{selectedEvent}</h3><p className="inspector-location"><MapPin size={13} /> Vanuatu · South Pacific</p><div className="inspector-grid"><div><span>Magnitude</span><b>5.1 Mw</b></div><div><span>Depth</span><b>81 km</b></div><div><span>Updated</span><b>4 min ago</b></div></div><div className="inspector-source"><SourceTag source="USGS Earthquake Hazards" /><ExternalLink size={13} /></div><div className="inspector-boundary"><ShieldCheck size={13} /> Public source · informational use only</div></div></div><div className="map-legend"><span><i className="legend-dot teal" />Seismic</span><span><i className="legend-dot orange" />Fire</span><span><i className="legend-dot purple" />Aviation</span><span><i className="legend-dot blue" />Weather</span><span><i className="legend-dot cyan" />Maritime</span></div></div>
+            <div className="map-panel panel"><div className="panel-header"><div><div className="panel-title"><span className="panel-kicker">LIVE MAP</span>Global signal field</div><div className="panel-meta"><span className="pulse-live" /> {snapshot?.meta.freshness ?? "Public feeds · refreshed continuously"}</div></div><div className="panel-actions"><div className="map-search"><Search size={13} /><input value={mapQuery} onChange={event => setMapQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && mapQuery.trim()) { const match = snapshot?.earthquakes.find(item => `${item.title} ${item.place}`.toLowerCase().includes(mapQuery.toLowerCase())); setSelectedEvent(match ? `${match.title} · ${match.place}` : `${mapQuery.trim()} · public index`); } }} placeholder="Search map" /></div><button className="ghost-button"><Crosshair size={15} /> Focus</button><button className="ghost-button"><Boxes size={15} /> Base map <ChevronDown size={13} /></button></div></div><div className="map-wrap"><MapCanvas activeLayers={activeLayers} places={liveGlobePlaces} onSelect={handleMapSelect} /><div className="map-inspector"><div className="inspector-top"><span className="event-type">{selectedPlace.category}</span><button aria-label="Close inspector"><X size={14} /></button></div><h3>{selectedPlace.label}</h3><p className="inspector-location"><MapPin size={13} /> {selectedPlace.name} · Public geo record</p><div className="inspector-grid"><div><span>Signal</span><b>{selectedPlace.metric}</b></div><div><span>Context</span><b>{selectedPlace.detail}</b></div><div><span>Updated</span><b>4 min ago</b></div></div><div className="inspector-source"><SourceTag source={selectedPlace.source} /><ExternalLink size={13} /></div><div className="inspector-boundary"><ShieldCheck size={13} /> Public source · informational use only</div></div></div><div className="map-legend"><span><i className="legend-dot teal" />Seismic</span><span><i className="legend-dot orange" />Fire</span><span><i className="legend-dot purple" />Aviation</span><span><i className="legend-dot blue" />Weather</span><span><i className="legend-dot cyan" />Maritime</span></div></div>
 
             <div className="layers-panel panel"><div className="panel-header"><div><div className="panel-title"><span className="panel-kicker">CONTROL ROOM</span>Signal layers</div><div className="panel-meta">Select what you want to see</div></div><button className="icon-button small"><SlidersHorizontal size={15} /></button></div><div className="layer-list">{layerCatalog.map(layer => { const Icon = layer.icon; const active = activeLayers.includes(layer.id); return <button key={layer.id} className={`layer-row ${active ? "selected" : ""}`} onClick={() => toggleLayer(layer.id)}><span className={`layer-symbol ${layer.color}`}><Icon size={15} /></span><span className="layer-copy"><b>{layer.label}</b><small>{active ? "Visible on map" : "Hidden from map"}</small></span><span className="layer-count">{layer.count}</span><span className={`toggle ${active ? "on" : ""}`}><i /></span></button>; })}</div><div className="layers-footer"><span><Eye size={13} /> {activeLayers.length} of 7 layers visible</span><button onClick={() => setActiveLayers(layerCatalog.map(layer => layer.id))}>Show all</button></div></div>
           </section>

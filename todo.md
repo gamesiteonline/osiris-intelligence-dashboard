@@ -41,3 +41,15 @@
 
 - [x] Disable SVG route movement for prefers-reduced-motion users
 - [x] Save a fresh checkpoint after the final layer-aware route-trail fix
+
+- [x] Replace the stylized map with a real geographic 3D globe surface
+- [x] Add drag/touch rotation, pinch or wheel zoom, and reset-view controls
+- [x] Add tappable place markers and focused location inspection details
+- [x] Connect place inspection to clearly sourced public-data records and attribution
+- [x] Preserve responsive, accessible touch interactions and reduced-motion behavior
+- [x] Verify desktop/mobile globe interactions, typecheck, tests, build, and checkpoint
+
+- [x] Improve globe rendering so latitude tilt produces spherical perspective rather than a flat texture disc
+- [x] Add pinch zoom support for touch devices
+- [x] Bind selected globe places to dynamic source-backed inspection details
+- [x] Save a fresh checkpoint after the final globe verification
