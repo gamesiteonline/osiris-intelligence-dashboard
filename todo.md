@@ -69,3 +69,9 @@
 - [x] Add animated globe camera transitions when a location is tapped or searched
 - [x] Preserve reset-view behavior and reduced-motion accessibility for camera focus
 - [x] Verify focus transitions on desktop/mobile and save a new checkpoint
+
+- [ ] Check GitHub CLI authentication and repository permissions
+- [ ] Prepare a clean source export and deployment documentation
+- [ ] Create and push the OSIRIS repository to GitHub if authorized
+- [ ] Generate a ZIP archive of the project source
+- [ ] Provide Vercel deployment steps and required environment variables
