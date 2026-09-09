@@ -71,7 +71,8 @@ function SourceTag({ source }: { source: string }) {
 }
 
 const globeTextureUrl = "/manus-storage/osiris-earth-texture_45c22fd8.jpg";
-const fallbackGlobePlaces = [
+type GlobePlace = { name: string; lat: number; lng: number; color: string; label: string; source: string; category: string; metric: string; detail: string; observedAt?: string; availability?: string; sourceUrl?: string };
+const fallbackGlobePlaces: GlobePlace[] = [
   { name: "Vanuatu", lat: -17.7, lng: 168.3, color: "#62f5c8", label: "M 5.1 · Vanuatu", source: "USGS Earthquake Hazards", category: "SEISMIC EVENT", metric: "5.1 Mw", detail: "81 km depth" },
   { name: "Amazonas, Brazil", lat: -3.4, lng: -62.2, color: "#ffad68", label: "Fire cluster · Brazil", source: "NASA FIRMS", category: "THERMAL ANOMALY", metric: "42 hotspots", detail: "High confidence" },
   { name: "Piemonte, Italy", lat: 45.1, lng: 7.7, color: "#72a8ff", label: "Storm cell · Piemonte", source: "MeteoAlarm", category: "SEVERE WEATHER", metric: "Storm cell", detail: "Regional warning" },
@@ -80,7 +81,7 @@ const fallbackGlobePlaces = [
   { name: "Sydney, Australia", lat: -33.9, lng: 151.2, color: "#ffad68", label: "Fire · Australia", source: "NASA FIRMS", category: "THERMAL ANOMALY", metric: "18 hotspots", detail: "Moderate confidence" },
 ];
 
-function MapCanvas({ activeLayers, places, onSelect }: { activeLayers: string[]; places: typeof fallbackGlobePlaces; onSelect: (label: string) => void }) {
+function MapCanvas({ activeLayers, places, onSelect }: { activeLayers: string[]; places: GlobePlace[]; onSelect: (place: GlobePlace) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const rotationRef = useRef({ lng: 12, lat: 8 });
@@ -89,7 +90,7 @@ function MapCanvas({ activeLayers, places, onSelect }: { activeLayers: string[];
   const pinchRef = useRef({ distance: 0, zoom: 1 });
   const [zoom, setZoom] = useState(1);
   const [textureReady, setTextureReady] = useState(false);
-  const [, setRotationVersion] = useState(0);
+  const [rotationVersion, setRotationVersion] = useState(0);
   const [heartbeat, setHeartbeat] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
   const showAircraftRoutes = activeLayers.includes("flights");
@@ -216,7 +217,7 @@ function MapCanvas({ activeLayers, places, onSelect }: { activeLayers: string[];
       context.fill();
       context.shadowBlur = 0;
     });
-  }, [zoom, textureReady, heartbeat, reducedMotion, showAircraftRoutes, showMaritimeRoutes]);
+  }, [zoom, textureReady, heartbeat, reducedMotion, showAircraftRoutes, showMaritimeRoutes, rotationVersion, places]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -264,7 +265,7 @@ function MapCanvas({ activeLayers, places, onSelect }: { activeLayers: string[];
       const radius = Math.min(width * .37, height * .72) * zoom;
       const cx = width / 2;
       const cy = height / 2 - 4;
-      let closest: { label: string; distance: number } | null = null;
+      let closest: { place: GlobePlace; distance: number } | null = null;
       places.forEach(place => {
         const lon = ((place.lng - rotationRef.current.lng) * Math.PI) / 180;
         const latRad = (place.lat * Math.PI) / 180;
@@ -275,10 +276,10 @@ function MapCanvas({ activeLayers, places, onSelect }: { activeLayers: string[];
         const px = cx + x3 * radius;
         const py = cy - y3 * radius;
         const distance = Math.hypot(px - x, py - y);
-        if (z3 > 0 && distance < 32 && (!closest || distance < closest.distance)) closest = { label: place.label, distance };
+        if (z3 > 0 && distance < 32 && (!closest || distance < closest.distance)) closest = { place, distance };
       });
-      const selected = closest;
-      if (selected !== null) onSelect((selected as { label: string; distance: number }).label);
+      const tappedPlace = closest as { place: GlobePlace; distance: number } | null;
+      if (tappedPlace) onSelect(tappedPlace.place);
     }
     dragRef.current.active = false;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
@@ -319,6 +320,8 @@ export default function Home() {
       category: "SEISMIC EVENT",
       metric: `${item.magnitude ?? "—"} Mw`,
       detail: "Public earthquake record",
+      observedAt: item.observedAt,
+      sourceUrl: item.sourceUrl,
     }));
     return [...earthquakes, ...fallbackGlobePlaces.filter(place => !earthquakes.some(item => item.name === place.name))];
   }, [snapshot]);
@@ -346,6 +349,10 @@ export default function Home() {
     const place = liveGlobePlaces.find(item => item.label === label);
     if (place) setSelectedPlace(place);
   };
+  const handleGlobePlaceSelect = (place: GlobePlace) => {
+    setSelectedPlace(place);
+    setSelectedEvent(place.label);
+  };
   const showWorkspace = () => { if (!user) startLogin(); else setShowWorkspacePanel(true); };
 
   return (
@@ -369,7 +376,7 @@ export default function Home() {
           <div className="stat-strip"><div className="stat-card"><div className="stat-label"><span className="stat-icon teal"><Activity size={15} /></span>EVENTS IN VIEW</div><div className="stat-number">2,847</div><div className="stat-foot positive"><ArrowUpRight size={13} /> 12.8% vs. 24h</div></div><div className="stat-card"><div className="stat-label"><span className="stat-icon orange"><AlertTriangle size={15} /></span>ACTIVE ALERTS</div><div className="stat-number">{alertHistory?.length ?? 18}</div><div className="stat-foot warning"><span className="mini-dot" /> 4 require review</div></div><div className="stat-card"><div className="stat-label"><span className="stat-icon blue"><Database size={15} /></span>PUBLIC SOURCES</div><div className="stat-number">11<span className="stat-unit"> / 11</span></div><div className="stat-foot neutral"><Check size={13} /> All responding</div></div><div className="stat-card"><div className="stat-label"><span className="stat-icon purple"><Target size={15} /></span>FOLLOWED AREAS</div><div className="stat-number">06</div><div className="stat-foot neutral"><MapPin size={13} /> Personal workspace</div></div></div>
 
           <section className="dashboard-grid">
-            <div className="map-panel panel"><div className="panel-header"><div><div className="panel-title"><span className="panel-kicker">LIVE MAP</span>Global signal field</div><div className="panel-meta"><span className="pulse-live" /> {snapshot?.meta.freshness ?? "Public feeds · refreshed continuously"}</div></div><div className="panel-actions"><div className="map-search"><Search size={13} /><input value={mapQuery} onChange={event => setMapQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && mapQuery.trim()) { const match = snapshot?.earthquakes.find(item => `${item.title} ${item.place}`.toLowerCase().includes(mapQuery.toLowerCase())); setSelectedEvent(match ? `${match.title} · ${match.place}` : `${mapQuery.trim()} · public index`); } }} placeholder="Search map" /></div><button className="ghost-button"><Crosshair size={15} /> Focus</button><button className="ghost-button"><Boxes size={15} /> Base map <ChevronDown size={13} /></button></div></div><div className="map-wrap"><MapCanvas activeLayers={activeLayers} places={liveGlobePlaces} onSelect={handleMapSelect} /><div className="map-inspector"><div className="inspector-top"><span className="event-type">{selectedPlace.category}</span><button aria-label="Close inspector"><X size={14} /></button></div><h3>{selectedPlace.label}</h3><p className="inspector-location"><MapPin size={13} /> {selectedPlace.name} · Public geo record</p><div className="inspector-grid"><div><span>Signal</span><b>{selectedPlace.metric}</b></div><div><span>Context</span><b>{selectedPlace.detail}</b></div><div><span>Updated</span><b>4 min ago</b></div></div><div className="inspector-source"><SourceTag source={selectedPlace.source} /><ExternalLink size={13} /></div><div className="inspector-boundary"><ShieldCheck size={13} /> Public source · informational use only</div></div></div><div className="map-legend"><span><i className="legend-dot teal" />Seismic</span><span><i className="legend-dot orange" />Fire</span><span><i className="legend-dot purple" />Aviation</span><span><i className="legend-dot blue" />Weather</span><span><i className="legend-dot cyan" />Maritime</span></div></div>
+            <div className="map-panel panel"><div className="panel-header"><div><div className="panel-title"><span className="panel-kicker">LIVE MAP</span>Global signal field</div><div className="panel-meta"><span className="pulse-live" /> {snapshot?.meta.freshness ?? "Public feeds · refreshed continuously"}</div></div><div className="panel-actions"><div className="map-search"><Search size={13} /><input value={mapQuery} onChange={event => setMapQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && mapQuery.trim()) { const place = liveGlobePlaces.find(item => `${item.label} ${item.name}`.toLowerCase().includes(mapQuery.toLowerCase())); if (place) handleGlobePlaceSelect(place); else setSelectedEvent(`${mapQuery.trim()} · public index`); } }} placeholder="Search map" /></div><button className="ghost-button"><Crosshair size={15} /> Focus</button><button className="ghost-button"><Boxes size={15} /> Base map <ChevronDown size={13} /></button></div></div><div className="map-wrap"><MapCanvas activeLayers={activeLayers} places={liveGlobePlaces} onSelect={handleGlobePlaceSelect} /><div className="map-inspector"><div className="inspector-top"><span className="event-type">{selectedPlace.category}</span><button aria-label="Close inspector"><X size={14} /></button></div><h3>{selectedPlace.label}</h3><p className="inspector-location"><MapPin size={13} /> {selectedPlace.name} · Public geo record</p><div className="inspector-grid"><div><span>Signal</span><b>{selectedPlace.metric}</b></div><div><span>Context</span><b>{selectedPlace.detail}</b></div><div><span>Observed</span><b>{selectedPlace.observedAt ? new Date(selectedPlace.observedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Fallback"}</b></div></div><div className="inspector-source"><SourceTag source={selectedPlace.source} /><ExternalLink size={13} /></div><div className="inspector-boundary"><ShieldCheck size={13} /> {selectedPlace.availability ?? "Public source · informational use only"}</div></div></div><div className="map-legend"><span><i className="legend-dot teal" />Seismic</span><span><i className="legend-dot orange" />Fire</span><span><i className="legend-dot purple" />Aviation</span><span><i className="legend-dot blue" />Weather</span><span><i className="legend-dot cyan" />Maritime</span></div></div>
 
             <div className="layers-panel panel"><div className="panel-header"><div><div className="panel-title"><span className="panel-kicker">CONTROL ROOM</span>Signal layers</div><div className="panel-meta">Select what you want to see</div></div><button className="icon-button small"><SlidersHorizontal size={15} /></button></div><div className="layer-list">{layerCatalog.map(layer => { const Icon = layer.icon; const active = activeLayers.includes(layer.id); return <button key={layer.id} className={`layer-row ${active ? "selected" : ""}`} onClick={() => toggleLayer(layer.id)}><span className={`layer-symbol ${layer.color}`}><Icon size={15} /></span><span className="layer-copy"><b>{layer.label}</b><small>{active ? "Visible on map" : "Hidden from map"}</small></span><span className="layer-count">{layer.count}</span><span className={`toggle ${active ? "on" : ""}`}><i /></span></button>; })}</div><div className="layers-footer"><span><Eye size={13} /> {activeLayers.length} of 7 layers visible</span><button onClick={() => setActiveLayers(layerCatalog.map(layer => layer.id))}>Show all</button></div></div>
           </section>

@@ -53,3 +53,15 @@
 - [x] Add pinch zoom support for touch devices
 - [x] Bind selected globe places to dynamic source-backed inspection details
 - [x] Save a fresh checkpoint after the final globe verification
+
+- [x] Replace the stylized map with a real interactive 3D Earth surface
+- [x] Add drag/touch rotation, wheel zoom, pinch zoom, and reset-view controls
+- [x] Add tappable locations with focused place panels
+- [x] Bind selected places to real public snapshot records and source attribution
+- [x] Verify desktop/mobile touch behavior, accessibility, typecheck, tests, build, and checkpoint
+
+- [x] Replace the stylized map with a real interactive 3D Earth surface
+- [x] Add drag/touch rotation, wheel zoom, pinch zoom, and reset-view controls
+- [x] Add tappable locations with focused place panels
+- [x] Bind selected places to real public snapshot records and source attribution
+- [x] Verify desktop/mobile touch behavior, accessibility, typecheck, tests, build, and checkpoint
