@@ -33,3 +33,11 @@
 - [x] Add animated maritime route trails with movement-history markers
 - [x] Label simulated route history and preserve reduced-motion accessibility
 - [x] Verify desktop/mobile trails, typecheck, tests, build, and checkpoint
+
+- [x] Add animated aircraft route trails with movement-history markers
+- [x] Add animated maritime route trails with movement-history markers
+- [x] Label simulated route history and preserve reduced-motion accessibility
+- [x] Verify desktop/mobile trails, typecheck, tests, build, and checkpoint
+
+- [x] Disable SVG route movement for prefers-reduced-motion users
+- [x] Save a fresh checkpoint after the final layer-aware route-trail fix

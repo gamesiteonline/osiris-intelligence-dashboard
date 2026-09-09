@@ -72,6 +72,16 @@ function SourceTag({ source }: { source: string }) {
 
 function MapCanvas({ activeLayers, onSelect }: { activeLayers: string[]; onSelect: (label: string) => void }) {
   const [heartbeat, setHeartbeat] = useState(0);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const showAircraftRoutes = activeLayers.includes("flights");
+  const showMaritimeRoutes = activeLayers.includes("maritime");
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReducedMotion(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
   useEffect(() => {
     const timer = window.setInterval(() => setHeartbeat(current => (current + 1) % 4), 2600);
     return () => window.clearInterval(timer);
@@ -91,14 +101,18 @@ function MapCanvas({ activeLayers, onSelect }: { activeLayers: string[]; onSelec
         <circle className="signal-arc arc-one" cx="170" cy="130" r="34" />
         <circle className="signal-arc arc-two" cx="710" cy="190" r="52" />
         <circle className="signal-arc arc-three" cx="560" cy="305" r="42" />
-        <path id="air-route-a" className="route-trail route-air" d="M120 250 C260 180 360 225 500 150 S760 120 900 205" />
-        <path id="air-route-b" className="route-trail route-air route-secondary" d="M320 360 C420 290 540 330 640 260 S820 250 930 320" />
-        <path id="sea-route-a" className="route-trail route-sea" d="M80 405 C220 370 340 410 470 390 S720 420 920 365" />
-        <path id="sea-route-b" className="route-trail route-sea route-secondary" d="M160 445 C300 420 430 445 570 430 S780 450 900 420" />
-        <circle className="route-vessel route-vessel-a" r="4"><animateMotion dur="11s" repeatCount="indefinite" rotate="auto"><mpath href="#sea-route-a" /></animateMotion></circle>
-        <circle className="route-vessel route-vessel-b" r="3"><animateMotion dur="15s" begin="-6s" repeatCount="indefinite" rotate="auto"><mpath href="#sea-route-b" /></animateMotion></circle>
-        <circle className="route-aircraft route-aircraft-a" r="4"><animateMotion dur="8s" repeatCount="indefinite" rotate="auto"><mpath href="#air-route-a" /></animateMotion></circle>
-        <circle className="route-aircraft route-aircraft-b" r="3"><animateMotion dur="10s" begin="-4s" repeatCount="indefinite" rotate="auto"><mpath href="#air-route-b" /></animateMotion></circle>
+        {showAircraftRoutes && <g aria-label="Simulated aircraft movement history">
+          <path id="air-route-a" className="route-trail route-air" d="M120 250 C260 180 360 225 500 150 S760 120 900 205" />
+          <path id="air-route-b" className="route-trail route-air route-secondary" d="M320 360 C420 290 540 330 640 260 S820 250 930 320" />
+          <circle className="route-aircraft route-aircraft-a" cx="500" cy="150" r="4">{!reducedMotion && <animateMotion dur="8s" repeatCount="indefinite" rotate="auto"><mpath href="#air-route-a" /></animateMotion>}</circle>
+          <circle className="route-aircraft route-aircraft-b" cx="640" cy="260" r="3">{!reducedMotion && <animateMotion dur="10s" begin="-4s" repeatCount="indefinite" rotate="auto"><mpath href="#air-route-b" /></animateMotion>}</circle>
+        </g>}
+        {showMaritimeRoutes && <g aria-label="Simulated maritime movement history">
+          <path id="sea-route-a" className="route-trail route-sea" d="M80 405 C220 370 340 410 470 390 S720 420 920 365" />
+          <path id="sea-route-b" className="route-trail route-sea route-secondary" d="M160 445 C300 420 430 445 570 430 S780 450 900 420" />
+          <circle className="route-vessel route-vessel-a" cx="470" cy="390" r="4">{!reducedMotion && <animateMotion dur="11s" repeatCount="indefinite" rotate="auto"><mpath href="#sea-route-a" /></animateMotion>}</circle>
+          <circle className="route-vessel route-vessel-b" cx="570" cy="430" r="3">{!reducedMotion && <animateMotion dur="15s" begin="-6s" repeatCount="indefinite" rotate="auto"><mpath href="#sea-route-b" /></animateMotion>}</circle>
+        </g>}
       </svg>
       <div className="map-scale"><span>0</span><i /><span>2,000 km</span></div>
       {mapDots.map(([x, y, color, label], index) => {
