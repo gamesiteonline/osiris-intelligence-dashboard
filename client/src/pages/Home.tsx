@@ -71,6 +71,11 @@ function SourceTag({ source }: { source: string }) {
 }
 
 function MapCanvas({ activeLayers, onSelect }: { activeLayers: string[]; onSelect: (label: string) => void }) {
+  const [heartbeat, setHeartbeat] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setHeartbeat(current => (current + 1) % 4), 2600);
+    return () => window.clearInterval(timer);
+  }, []);
   return (
     <div className="map-canvas" role="img" aria-label="Stylized global map showing public intelligence events">
       <div className="map-grid" />
@@ -82,13 +87,19 @@ function MapCanvas({ activeLayers, onSelect }: { activeLayers: string[]; onSelec
       <div className="map-label map-label-north">NORTH ATLANTIC</div>
       <div className="map-label map-label-pacific">PACIFIC OCEAN</div>
       <div className="map-label map-label-sahara">SAHARA</div>
+      <svg className="map-signal-arcs" viewBox="0 0 1000 480" preserveAspectRatio="none" aria-hidden="true">
+        <circle className="signal-arc arc-one" cx="170" cy="130" r="34" />
+        <circle className="signal-arc arc-two" cx="710" cy="190" r="52" />
+        <circle className="signal-arc arc-three" cx="560" cy="305" r="42" />
+      </svg>
       <div className="map-scale"><span>0</span><i /><span>2,000 km</span></div>
       {mapDots.map(([x, y, color, label], index) => {
         const visible = activeLayers.length > 0 || index < 4;
-        return visible ? <button key={label + index} className={`map-dot dot-${color}`} style={{ left: `${x}%`, top: `${y}%` }} onClick={() => onSelect(label)} aria-label={`Inspect ${label}`}><span /><b>{index % 3 === 0 ? "" : ""}</b></button> : null;
+        const livePulse = (index + heartbeat) % 4 === 0;
+        return visible ? <button key={label + index} className={`map-dot dot-${color} ${livePulse ? "is-live" : ""}`} style={{ left: `${x}%`, top: `${y}%`, animationDelay: `${(index % 5) * 180}ms` }} onClick={() => onSelect(label)} aria-label={`Inspect ${label}`}><span className="marker-core" /><span className="marker-halo" /><b /></button> : null;
       })}
       <div className="map-controls"><button aria-label="Zoom in">+</button><button aria-label="Zoom out">−</button><button aria-label="Locate me"><LocateFixed size={15} /></button></div>
-      <div className="map-status"><span className="pulse-live" /> LIVE SNAPSHOT <span>·</span> 18:42:16 UTC</div>
+      <div className="map-status"><span className="pulse-live" /> <span className="status-live-label">SIMULATED HEARTBEAT</span> <span>·</span> PUBLIC FEED MOTION <span>·</span> 18:42:16 UTC</div>
     </div>
   );
 }

@@ -24,3 +24,7 @@
 - [x] Complete domain and IP recon result handling with explicit RDAP, DNS, TLS certificate, and CVE states
 - [x] Add per-result provenance blocks with source, timestamp, availability, and permitted-use metadata
 - [x] Expand Vitest coverage for snapshot adapters, workspace persistence, recon success/error paths, and alert rule boundaries
+
+- [x] Add cinematic animated map markers with pulsing halos and signal rings
+- [x] Add clearly labeled simulated public-data heartbeat motion with reduced-motion support
+- [x] Verify animated desktop/mobile map presentation, typecheck, tests, build, and checkpoint
