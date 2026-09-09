@@ -65,3 +65,7 @@
 - [x] Add tappable locations with focused place panels
 - [x] Bind selected places to real public snapshot records and source attribution
 - [x] Verify desktop/mobile touch behavior, accessibility, typecheck, tests, build, and checkpoint
+
+- [x] Add animated globe camera transitions when a location is tapped or searched
+- [x] Preserve reset-view behavior and reduced-motion accessibility for camera focus
+- [x] Verify focus transitions on desktop/mobile and save a new checkpoint

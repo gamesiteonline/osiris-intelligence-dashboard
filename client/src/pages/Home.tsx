@@ -81,7 +81,7 @@ const fallbackGlobePlaces: GlobePlace[] = [
   { name: "Sydney, Australia", lat: -33.9, lng: 151.2, color: "#ffad68", label: "Fire · Australia", source: "NASA FIRMS", category: "THERMAL ANOMALY", metric: "18 hotspots", detail: "Moderate confidence" },
 ];
 
-function MapCanvas({ activeLayers, places, onSelect }: { activeLayers: string[]; places: GlobePlace[]; onSelect: (place: GlobePlace) => void }) {
+function MapCanvas({ activeLayers, places, focusPlace, onSelect }: { activeLayers: string[]; places: GlobePlace[]; focusPlace: GlobePlace | null; onSelect: (place: GlobePlace) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const rotationRef = useRef({ lng: 12, lat: 8 });
@@ -93,6 +93,8 @@ function MapCanvas({ activeLayers, places, onSelect }: { activeLayers: string[];
   const [rotationVersion, setRotationVersion] = useState(0);
   const [heartbeat, setHeartbeat] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const lastFocusLabelRef = useRef<string | null>(focusPlace?.label ?? null);
+  const focusAnimationRef = useRef<number | null>(null);
   const showAircraftRoutes = activeLayers.includes("flights");
   const showMaritimeRoutes = activeLayers.includes("maritime");
 
@@ -114,6 +116,36 @@ function MapCanvas({ activeLayers, places, onSelect }: { activeLayers: string[];
     const timer = window.setInterval(() => setHeartbeat(current => (current + 1) % 4), 2200);
     return () => window.clearInterval(timer);
   }, [reducedMotion]);
+  useEffect(() => {
+    if (!focusPlace || focusPlace.label === lastFocusLabelRef.current) return;
+    lastFocusLabelRef.current = focusPlace.label;
+    if (focusAnimationRef.current !== null) cancelAnimationFrame(focusAnimationRef.current);
+    const start = { ...rotationRef.current };
+    const targetLng = focusPlace.lng;
+    const deltaLng = ((targetLng - start.lng + 540) % 360) - 180;
+    const targetLat = Math.max(-65, Math.min(65, focusPlace.lat));
+    const targetZoom = 1.16;
+    if (reducedMotion) {
+      rotationRef.current = { lng: targetLng, lat: targetLat };
+      setZoom(targetZoom);
+      setRotationVersion(current => current + 1);
+      return;
+    }
+    const startedAt = performance.now();
+    const duration = 760;
+    const ease = (value: number) => 1 - Math.pow(1 - value, 3);
+    const animateFocus = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = ease(progress);
+      rotationRef.current = { lng: start.lng + deltaLng * eased, lat: start.lat + (targetLat - start.lat) * eased };
+      setZoom(1 + (targetZoom - 1) * eased);
+      setRotationVersion(current => current + 1);
+      if (progress < 1) focusAnimationRef.current = requestAnimationFrame(animateFocus);
+      else focusAnimationRef.current = null;
+    };
+    focusAnimationRef.current = requestAnimationFrame(animateFocus);
+    return () => { if (focusAnimationRef.current !== null) cancelAnimationFrame(focusAnimationRef.current); };
+  }, [focusPlace, reducedMotion]);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -284,7 +316,7 @@ function MapCanvas({ activeLayers, places, onSelect }: { activeLayers: string[];
     dragRef.current.active = false;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
-  const resetGlobe = () => { rotationRef.current = { lng: 12, lat: 8 }; setZoom(1); setRotationVersion(current => current + 1); };
+  const resetGlobe = () => { rotationRef.current = { lng: 12, lat: 8 }; lastFocusLabelRef.current = null; setZoom(1); setRotationVersion(current => current + 1); };
   return (
     <div className="map-canvas globe-canvas" role="application" aria-label="Interactive real Earth globe. Drag to rotate, scroll or use controls to zoom, and tap a signal to inspect it.">
       <canvas ref={canvasRef} className="earth-globe" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} onWheel={event => { event.preventDefault(); setZoom(value => Math.max(.76, Math.min(1.28, value - event.deltaY * .0008))); }} />
@@ -376,7 +408,7 @@ export default function Home() {
           <div className="stat-strip"><div className="stat-card"><div className="stat-label"><span className="stat-icon teal"><Activity size={15} /></span>EVENTS IN VIEW</div><div className="stat-number">2,847</div><div className="stat-foot positive"><ArrowUpRight size={13} /> 12.8% vs. 24h</div></div><div className="stat-card"><div className="stat-label"><span className="stat-icon orange"><AlertTriangle size={15} /></span>ACTIVE ALERTS</div><div className="stat-number">{alertHistory?.length ?? 18}</div><div className="stat-foot warning"><span className="mini-dot" /> 4 require review</div></div><div className="stat-card"><div className="stat-label"><span className="stat-icon blue"><Database size={15} /></span>PUBLIC SOURCES</div><div className="stat-number">11<span className="stat-unit"> / 11</span></div><div className="stat-foot neutral"><Check size={13} /> All responding</div></div><div className="stat-card"><div className="stat-label"><span className="stat-icon purple"><Target size={15} /></span>FOLLOWED AREAS</div><div className="stat-number">06</div><div className="stat-foot neutral"><MapPin size={13} /> Personal workspace</div></div></div>
 
           <section className="dashboard-grid">
-            <div className="map-panel panel"><div className="panel-header"><div><div className="panel-title"><span className="panel-kicker">LIVE MAP</span>Global signal field</div><div className="panel-meta"><span className="pulse-live" /> {snapshot?.meta.freshness ?? "Public feeds · refreshed continuously"}</div></div><div className="panel-actions"><div className="map-search"><Search size={13} /><input value={mapQuery} onChange={event => setMapQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && mapQuery.trim()) { const place = liveGlobePlaces.find(item => `${item.label} ${item.name}`.toLowerCase().includes(mapQuery.toLowerCase())); if (place) handleGlobePlaceSelect(place); else setSelectedEvent(`${mapQuery.trim()} · public index`); } }} placeholder="Search map" /></div><button className="ghost-button"><Crosshair size={15} /> Focus</button><button className="ghost-button"><Boxes size={15} /> Base map <ChevronDown size={13} /></button></div></div><div className="map-wrap"><MapCanvas activeLayers={activeLayers} places={liveGlobePlaces} onSelect={handleGlobePlaceSelect} /><div className="map-inspector"><div className="inspector-top"><span className="event-type">{selectedPlace.category}</span><button aria-label="Close inspector"><X size={14} /></button></div><h3>{selectedPlace.label}</h3><p className="inspector-location"><MapPin size={13} /> {selectedPlace.name} · Public geo record</p><div className="inspector-grid"><div><span>Signal</span><b>{selectedPlace.metric}</b></div><div><span>Context</span><b>{selectedPlace.detail}</b></div><div><span>Observed</span><b>{selectedPlace.observedAt ? new Date(selectedPlace.observedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Fallback"}</b></div></div><div className="inspector-source"><SourceTag source={selectedPlace.source} /><ExternalLink size={13} /></div><div className="inspector-boundary"><ShieldCheck size={13} /> {selectedPlace.availability ?? "Public source · informational use only"}</div></div></div><div className="map-legend"><span><i className="legend-dot teal" />Seismic</span><span><i className="legend-dot orange" />Fire</span><span><i className="legend-dot purple" />Aviation</span><span><i className="legend-dot blue" />Weather</span><span><i className="legend-dot cyan" />Maritime</span></div></div>
+            <div className="map-panel panel"><div className="panel-header"><div><div className="panel-title"><span className="panel-kicker">LIVE MAP</span>Global signal field</div><div className="panel-meta"><span className="pulse-live" /> {snapshot?.meta.freshness ?? "Public feeds · refreshed continuously"}</div></div><div className="panel-actions"><div className="map-search"><Search size={13} /><input value={mapQuery} onChange={event => setMapQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && mapQuery.trim()) { const place = liveGlobePlaces.find(item => `${item.label} ${item.name}`.toLowerCase().includes(mapQuery.toLowerCase())); if (place) handleGlobePlaceSelect(place); else setSelectedEvent(`${mapQuery.trim()} · public index`); } }} placeholder="Search map" /></div><button className="ghost-button"><Crosshair size={15} /> Focus</button><button className="ghost-button"><Boxes size={15} /> Base map <ChevronDown size={13} /></button></div></div><div className="map-wrap"><MapCanvas activeLayers={activeLayers} places={liveGlobePlaces} focusPlace={selectedPlace} onSelect={handleGlobePlaceSelect} /><div className="map-inspector"><div className="inspector-top"><span className="event-type">{selectedPlace.category}</span><button aria-label="Close inspector"><X size={14} /></button></div><h3>{selectedPlace.label}</h3><p className="inspector-location"><MapPin size={13} /> {selectedPlace.name} · Public geo record</p><div className="inspector-grid"><div><span>Signal</span><b>{selectedPlace.metric}</b></div><div><span>Context</span><b>{selectedPlace.detail}</b></div><div><span>Observed</span><b>{selectedPlace.observedAt ? new Date(selectedPlace.observedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Fallback"}</b></div></div><div className="inspector-source"><SourceTag source={selectedPlace.source} /><ExternalLink size={13} /></div><div className="inspector-boundary"><ShieldCheck size={13} /> {selectedPlace.availability ?? "Public source · informational use only"}</div></div></div><div className="map-legend"><span><i className="legend-dot teal" />Seismic</span><span><i className="legend-dot orange" />Fire</span><span><i className="legend-dot purple" />Aviation</span><span><i className="legend-dot blue" />Weather</span><span><i className="legend-dot cyan" />Maritime</span></div></div>
 
             <div className="layers-panel panel"><div className="panel-header"><div><div className="panel-title"><span className="panel-kicker">CONTROL ROOM</span>Signal layers</div><div className="panel-meta">Select what you want to see</div></div><button className="icon-button small"><SlidersHorizontal size={15} /></button></div><div className="layer-list">{layerCatalog.map(layer => { const Icon = layer.icon; const active = activeLayers.includes(layer.id); return <button key={layer.id} className={`layer-row ${active ? "selected" : ""}`} onClick={() => toggleLayer(layer.id)}><span className={`layer-symbol ${layer.color}`}><Icon size={15} /></span><span className="layer-copy"><b>{layer.label}</b><small>{active ? "Visible on map" : "Hidden from map"}</small></span><span className="layer-count">{layer.count}</span><span className={`toggle ${active ? "on" : ""}`}><i /></span></button>; })}</div><div className="layers-footer"><span><Eye size={13} /> {activeLayers.length} of 7 layers visible</span><button onClick={() => setActiveLayers(layerCatalog.map(layer => layer.id))}>Show all</button></div></div>
           </section>
